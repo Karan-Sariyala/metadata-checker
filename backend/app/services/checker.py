@@ -26,6 +26,7 @@ class MetadataChecker:
             self._check_is_encrypted,
             self._check_multiple_saved_revisions,
             self._check_high_revision_count,
+            self._check_xmp_creator_tool_mismatch,
         ]
         for check in checks:
             try:
@@ -195,57 +196,53 @@ class MetadataChecker:
     # ── 9 ──────────────────────────────────────────────────────────
 
     def _check_xmp_date_mismatch(self, metadata: ExtractedMetadata) -> Finding | None:
-        if metadata.xmp_metadata is None:
-            return None
-        doc_dates: dict[str, datetime | None] = {}
-        try:
-            if metadata.created_date:
-                doc_dates["created"] = dateparser.parse(metadata.created_date)
-            if metadata.modified_date:
-                doc_dates["modified"] = dateparser.parse(metadata.modified_date)
-        except Exception:
-            return None
-        if not doc_dates:
+        xmp = metadata.xmp_metadata
+        if xmp is None:
             return None
 
-        xmp_date_strings = self._collect_date_strings(metadata.xmp_metadata)
-        if not xmp_date_strings:
+        xmp_create = xmp.get("xmp_create_date")
+        xmp_modify = xmp.get("xmp_modify_date")
+        if not xmp_create and not xmp_modify:
             return None
 
-        threshold = timedelta(hours=1)
-        for xmp_str in xmp_date_strings:
+        threshold = timedelta(seconds=60)
+        details: list[str] = []
+
+        for doc_val, xmp_key, label in [
+            (metadata.created_date, "xmp_create_date", "creation"),
+            (metadata.modified_date, "xmp_modify_date", "modification"),
+        ]:
+            xmp_val = xmp.get(xmp_key)
+            if not doc_val or not xmp_val:
+                continue
             try:
-                xmp_dt = dateparser.parse(xmp_str)
+                doc_dt = dateparser.parse(doc_val)
+                xmp_dt = dateparser.parse(xmp_val)
+                delta = abs((doc_dt - xmp_dt).total_seconds())
+                if delta > threshold.total_seconds():
+                    details.append(
+                        f"DocInfo {label.capitalize()}Date: {doc_val}\n"
+                        f"XMP xmp:CreateDate: {xmp_val}\n"
+                        f"Delta: {int(delta)} seconds"
+                    )
             except Exception:
                 continue
-            for label, doc_dt in doc_dates.items():
-                if doc_dt is not None and abs(xmp_dt - doc_dt) > threshold:
-                    return Finding(
-                        title="XMP and document info date mismatch",
-                        severity="Medium",
-                        confidence=0.7,
-                        explanation=(
-                            "The XMP metadata dates differ from the document "
-                            "information dictionary dates. In unmodified documents "
-                            "these values are usually consistent. A mismatch may "
-                            "suggest selective metadata editing."
-                        ),
-                    )
-        return None
 
-    @staticmethod
-    def _collect_date_strings(d: dict, depth: int = 0) -> list[str]:
-        if depth > 5:
-            return []
-        results: list[str] = []
-        date_keywords = ("date", "createdate", "modifydate", "metadatadate",
-                         "created", "modified", "create", "modify")
-        for key, value in d.items():
-            if isinstance(value, dict):
-                results.extend(MetadataChecker._collect_date_strings(value, depth + 1))
-            elif isinstance(value, str) and key.lower() in date_keywords:
-                results.append(value)
-        return results
+        if not details:
+            return None
+
+        return Finding(
+            title="XMP and document info date mismatch",
+            severity="Medium",
+            confidence=0.7,
+            explanation=(
+                "The XMP metadata dates differ from the document "
+                "information dictionary dates. In unmodified documents "
+                "these values are usually consistent. A mismatch may "
+                "suggest selective metadata editing."
+            ),
+            technical_detail="\n---\n".join(details),
+        )
 
     # ── 10 ─────────────────────────────────────────────────────────
 
@@ -303,6 +300,32 @@ class MetadataChecker:
                 f"The document contains {count} incremental updates, "
                 "which is unusually high for a standard document. This strongly "
                 "suggests the file was edited multiple times after its original creation."
+            ),
+        )
+
+
+    # ── 13 ─────────────────────────────────────────────────────────
+
+    def _check_xmp_creator_tool_mismatch(self, metadata: ExtractedMetadata) -> Finding | None:
+        xmp = metadata.xmp_metadata
+        if xmp is None:
+            return None
+        xmp_tool = xmp.get("xmp_creator_tool")
+        producer = metadata.producer
+        if not xmp_tool or not producer:
+            return None
+        xt = xmp_tool.lower().strip()
+        pt = producer.lower().strip()
+        if xt == pt or xt in pt or pt in xt:
+            return None
+        return Finding(
+            title="XMP creator tool differs from document producer",
+            severity="Low",
+            confidence=0.5,
+            explanation=(
+                "The tool recorded in XMP metadata differs from "
+                "the producer field in the document information dictionary. "
+                "This inconsistency can occur when metadata is partially updated."
             ),
         )
 

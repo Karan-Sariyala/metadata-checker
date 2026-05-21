@@ -1,5 +1,5 @@
 import os
-import xml.etree.ElementTree as ET
+import re
 from app.models.schemas import ExtractedMetadata
 
 
@@ -27,13 +27,7 @@ class MetadataExtractor:
         meta = doc.metadata or {}
 
         xmp_text = doc.get_xml_metadata()
-        xmp_dict = None
-        if xmp_text:
-            try:
-                root = ET.fromstring(xmp_text)
-                xmp_dict = self._xml_to_dict(root)
-            except ET.ParseError:
-                xmp_dict = {"raw": xmp_text}
+        xmp_dict = self._parse_xmp(xmp_text) if xmp_text else None
 
         incremental = self.detect_incremental_updates(file_path)
 
@@ -179,14 +173,32 @@ class MetadataExtractor:
             }
 
     @staticmethod
-    def _xml_to_dict(element: ET.Element) -> dict:
+    def _parse_xmp(xmp_string: str) -> dict:
+        if not xmp_string:
+            return {}
+
         result = {}
-        for child in element:
-            tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
-            if len(child):
-                result[tag] = MetadataExtractor._xml_to_dict(child)
-            else:
-                result[tag] = child.text or ""
+
+        date_patterns = {
+            "xmp_create_date": r"xmp:CreateDate[>\s]+([^<\s]+)",
+            "xmp_modify_date": r"xmp:ModifyDate[>\s]+([^<\s]+)",
+            "dc_date": r"dc:date[>\s]+([^<\s]+)",
+            "pdf_creation_date": r"pdf:CreationDate[>\s]+([^<\s]+)",
+        }
+        for key, pattern in date_patterns.items():
+            match = re.search(pattern, xmp_string, re.IGNORECASE)
+            if match:
+                result[key] = match.group(1).strip()
+
+        tool_patterns = {
+            "xmp_creator_tool": r"xmp:CreatorTool[>\s]+([^<]+)<",
+            "pdf_producer": r"pdf:Producer[>\s]+([^<]+)<",
+        }
+        for key, pattern in tool_patterns.items():
+            match = re.search(pattern, xmp_string, re.IGNORECASE)
+            if match:
+                result[key] = match.group(1).strip()
+
         return result
 
 
