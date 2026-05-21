@@ -5,6 +5,7 @@ import MetadataTable from "./MetadataTable";
 import FindingCard from "./FindingCard";
 import ModeToggle from "./ModeToggle";
 import ForensicTimeline from "./ForensicTimeline";
+import RiskDonut from "./RiskDonut";
 
 interface Props {
   report: AnalysisReport;
@@ -37,17 +38,24 @@ export default function ReportView({ report, onReset }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0 flex-1">
           <h2 className="text-xl font-bold text-white">
             {report.document_name}
           </h2>
           <p className="text-sm text-zinc-500">{report.file_type}</p>
         </div>
-        <RiskBadge
-          level={report.metadata_risk_level}
-          score={report.metadata_risk_score}
-        />
+        <div className="flex items-center gap-4 flex-wrap">
+          <RiskBadge
+            level={report.metadata_risk_level}
+            score={report.metadata_risk_score}
+          />
+          <RiskDonut
+            findings={report.findings}
+            totalScore={report.metadata_risk_score}
+            riskLevel={report.metadata_risk_level}
+          />
+        </div>
       </div>
 
       <div className="bg-zinc-800/40 rounded-xl p-4 border border-zinc-700">
