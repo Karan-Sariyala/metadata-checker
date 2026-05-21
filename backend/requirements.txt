@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+python-dotenv
+pymupdf
+pypdf
+python-docx
+Pillow
+piexif
+python-dateutil

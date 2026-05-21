@@ -1,0 +1,7 @@
+__pycache__/
+.env
+*.pyc
+uploads/
+node_modules/
+.next/
+dist/
