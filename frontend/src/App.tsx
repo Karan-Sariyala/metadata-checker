@@ -10,10 +10,12 @@ export default function App() {
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
   const handleAnalyze = async (file: File) => {
     setLoading(true);
     setError(null);
+    setUploadedFile(file);
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -33,6 +35,7 @@ export default function App() {
   const reset = () => {
     setReport(null);
     setError(null);
+    setUploadedFile(null);
   };
 
   return (
@@ -46,7 +49,7 @@ export default function App() {
         </header>
 
         {report ? (
-          <ReportView report={report} onReset={reset} />
+          <ReportView report={report} onReset={reset} uploadedFile={uploadedFile} />
         ) : (
           <UploadZone onAnalyze={handleAnalyze} loading={loading} error={error} />
         )}

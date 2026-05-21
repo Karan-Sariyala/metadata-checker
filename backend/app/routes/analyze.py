@@ -1,9 +1,11 @@
 import tempfile
 import os
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import Response
 from app.services.extractor import extractor
 from app.services.checker import checker as metadata_checker
 from app.services.scorer import scorer as risk_scorer
+from app.services.report_generator import generator as pdf_generator
 from app.models.schemas import AnalysisReport
 
 SUPPORTED_TYPES = {
@@ -16,8 +18,7 @@ SUPPORTED_TYPES = {
 router = APIRouter()
 
 
-@router.post("/analyze", response_model=AnalysisReport)
-async def analyze_file(file: UploadFile = File(...)):
+def _run_analysis(file: UploadFile) -> AnalysisReport:
     if file.content_type not in SUPPORTED_TYPES:
         raise HTTPException(
             status_code=422,
@@ -26,7 +27,7 @@ async def analyze_file(file: UploadFile = File(...)):
 
     tmp_path = None
     try:
-        content = await file.read()
+        content = file.file.read()
         suffix = os.path.splitext(file.filename or "upload")[1] or ".tmp"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(content)
@@ -46,10 +47,35 @@ async def analyze_file(file: UploadFile = File(...)):
             findings=findings,
             recommended_action=action,
         )
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+@router.post("/analyze", response_model=AnalysisReport)
+async def analyze_file(file: UploadFile = File(...)):
+    try:
+        return _run_analysis(file)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+
+
+@router.post("/analyze/pdf-report")
+async def analyze_pdf_report(file: UploadFile = File(...)):
+    try:
+        report = _run_analysis(file)
+        pdf_bytes = pdf_generator.generate(report)
+        safe_name = (file.filename or "report").replace(" ", "_")
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename=report_{safe_name}.pdf',
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

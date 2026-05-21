@@ -8,3 +8,4 @@ python-docx
 Pillow
 piexif
 python-dateutil
+reportlab

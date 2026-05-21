@@ -1,4 +1,5 @@
 import { useState } from "react";
+import axios from "axios";
 import type { AnalysisReport } from "../types";
 import RiskBadge from "./RiskBadge";
 import MetadataTable from "./MetadataTable";
@@ -10,7 +11,10 @@ import RiskDonut from "./RiskDonut";
 interface Props {
   report: AnalysisReport;
   onReset: () => void;
+  uploadedFile: File | null;
 }
+
+const PDF_API = "http://localhost:8080/api/analyze/pdf-report";
 
 const simpleSummary: Record<string, string> = {
   Low: "A few minor metadata signals were found. Nothing out of the ordinary.",
@@ -20,11 +24,11 @@ const simpleSummary: Record<string, string> = {
     "This document has multiple metadata signals that suggest it may have been edited or processed after its original creation. You may want to verify it independently.",
 };
 
-export default function ReportView({ report, onReset }: Props) {
+export default function ReportView({ report, onReset, uploadedFile }: Props) {
   const [mode, setMode] = useState<"simple" | "technical">("simple");
   const [jsonOpen, setJsonOpen] = useState(false);
 
-  const handleDownload = () => {
+  const handleDownloadJson = () => {
     const blob = new Blob([JSON.stringify(report, null, 2)], {
       type: "application/json",
     });
@@ -34,6 +38,23 @@ export default function ReportView({ report, onReset }: Props) {
     a.download = `${report.document_name.replace(/\.[^.]+$/, "")}_metadata_report.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!uploadedFile) return;
+    try {
+      const fd = new FormData();
+      fd.append("file", uploadedFile);
+      const { data } = await axios.post(PDF_API, fd, { responseType: "blob" });
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `report_${uploadedFile.name.replace(/\.[^.]+$/, "")}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently fail — PDF download error
+    }
   };
 
   return (
@@ -118,10 +139,17 @@ export default function ReportView({ report, onReset }: Props) {
 
       <div className="flex gap-3 flex-wrap">
         <button
-          onClick={handleDownload}
+          onClick={handleDownloadJson}
           className="px-5 py-2.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
         >
-          Download JSON Report
+          Download JSON
+        </button>
+        <button
+          onClick={handleDownloadPdf}
+          disabled={!uploadedFile}
+          className="px-5 py-2.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors disabled:opacity-40"
+        >
+          Download PDF Report
         </button>
         <button
           onClick={onReset}
