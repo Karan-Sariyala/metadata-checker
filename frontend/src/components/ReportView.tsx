@@ -4,6 +4,7 @@ import RiskBadge from "./RiskBadge";
 import MetadataTable from "./MetadataTable";
 import FindingCard from "./FindingCard";
 import ModeToggle from "./ModeToggle";
+import ForensicTimeline from "./ForensicTimeline";
 
 interface Props {
   report: AnalysisReport;
@@ -70,6 +71,11 @@ export default function ReportView({ report, onReset }: Props) {
           ))}
         </div>
       </section>
+
+      <ForensicTimeline
+        metadata={report.extracted_metadata}
+        findings={report.findings}
+      />
 
       <section>
         <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">

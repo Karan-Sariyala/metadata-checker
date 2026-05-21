@@ -14,6 +14,7 @@ export interface ExtractedMetadata {
   is_encrypted: boolean | null;
   xmp_metadata: Record<string, unknown> | null;
   raw_info: Record<string, unknown> | null;
+  incremental_updates: Record<string, unknown> | null;
 }
 
 export interface Finding {
