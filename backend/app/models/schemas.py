@@ -18,6 +18,7 @@ class ExtractedMetadata(BaseModel):
     is_encrypted: Optional[bool] = None
     xmp_metadata: Optional[dict] = None
     raw_info: Optional[dict] = None
+    incremental_updates: Optional[dict] = None
 
 
 class Finding(BaseModel):

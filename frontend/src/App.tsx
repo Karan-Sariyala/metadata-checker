@@ -4,7 +4,7 @@ import type { AnalysisReport } from "./types";
 import UploadZone from "./components/UploadZone";
 import ReportView from "./components/ReportView";
 
-const API_URL = "http://localhost:8000/api/analyze";
+const API_URL = "http://localhost:8080/api/analyze";
 
 export default function App() {
   const [report, setReport] = useState<AnalysisReport | null>(null);

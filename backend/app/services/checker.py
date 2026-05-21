@@ -24,6 +24,8 @@ class MetadataChecker:
             self._check_author_empty,
             self._check_xmp_date_mismatch,
             self._check_is_encrypted,
+            self._check_multiple_saved_revisions,
+            self._check_high_revision_count,
         ]
         for check in checks:
             try:
@@ -260,6 +262,49 @@ class MetadataChecker:
                 ),
             )
         return None
+
+
+    # ── 11 ─────────────────────────────────────────────────────────
+
+    def _check_multiple_saved_revisions(self, metadata: ExtractedMetadata) -> Finding | None:
+        inc = metadata.incremental_updates
+        if inc is None or not inc.get("has_incremental_updates"):
+            return None
+        count = inc.get("revision_count", 1)
+        positions = inc.get("revision_positions", [])
+        severity: str = "Medium" if count == 2 else "High"
+        return Finding(
+            title="PDF contains multiple saved revisions",
+            severity=severity,
+            confidence=0.75,
+            explanation=(
+                f"This PDF contains {count} revision layers, meaning "
+                "it was saved multiple times after its original creation. Each save "
+                "may represent an edit. While re-saving is normal, multiple revisions "
+                "in a sensitive document may warrant closer review."
+            ),
+            technical_detail=f"%%EOF markers found at byte offsets: {positions}",
+        )
+
+    # ── 12 ─────────────────────────────────────────────────────────
+
+    def _check_high_revision_count(self, metadata: ExtractedMetadata) -> Finding | None:
+        inc = metadata.incremental_updates
+        if inc is None:
+            return None
+        count = inc.get("revision_count", 0)
+        if count <= 3:
+            return None
+        return Finding(
+            title="High revision count detected",
+            severity="High",
+            confidence=0.8,
+            explanation=(
+                f"The document contains {count} incremental updates, "
+                "which is unusually high for a standard document. This strongly "
+                "suggests the file was edited multiple times after its original creation."
+            ),
+        )
 
 
 checker = MetadataChecker()

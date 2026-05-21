@@ -35,11 +35,13 @@ class MetadataExtractor:
             except ET.ParseError:
                 xmp_dict = {"raw": xmp_text}
 
+        incremental = self.detect_incremental_updates(file_path)
+
         result = ExtractedMetadata(
             file_name=file_name,
             file_size_bytes=os.path.getsize(file_path),
             file_type="application/pdf",
-            pdf_version=doc.pdf_version(),
+            pdf_version=meta.get("format"),
             created_date=meta.get("creationDate"),
             modified_date=meta.get("modDate"),
             author=meta.get("author"),
@@ -54,6 +56,7 @@ class MetadataExtractor:
                 "author", "title", "subject", "creator", "producer",
                 "creationDate", "modDate"
             )},
+            incremental_updates=incremental,
         )
         doc.close()
         return result
@@ -141,6 +144,39 @@ class MetadataExtractor:
                 "version": props.version,
             },
         )
+
+    def detect_incremental_updates(self, file_path: str) -> dict:
+        try:
+            with open(file_path, "rb") as f:
+                content = f.read()
+
+            eof_positions = []
+            search_from = 0
+            while True:
+                pos = content.find(b"%%EOF", search_from)
+                if pos == -1:
+                    break
+                eof_positions.append(pos)
+                search_from = pos + 5
+
+            revision_count = len(eof_positions)
+            xref_count = content.count(b"\nxref")
+
+            return {
+                "has_incremental_updates": revision_count > 1,
+                "revision_count": revision_count,
+                "xref_count": xref_count,
+                "revision_positions": eof_positions,
+                "is_suspicious": revision_count > 2,
+            }
+        except Exception:
+            return {
+                "has_incremental_updates": False,
+                "revision_count": 1,
+                "xref_count": 0,
+                "revision_positions": [],
+                "is_suspicious": False,
+            }
 
     @staticmethod
     def _xml_to_dict(element: ET.Element) -> dict:

@@ -1,9 +1,11 @@
 from app.models.schemas import Finding
 
 
+_CLUSTER_DATE = {"Modified date precedes creation date", "XMP and document info date mismatch"}
+_CLUSTER_REVISION = {"PDF contains multiple saved revisions", "High revision count detected"}
 _CLUSTER_TITLES = {
-    "Modified date precedes creation date",
-    "XMP and document info date mismatch",
+    *_CLUSTER_DATE,
+    *_CLUSTER_REVISION,
     "Known editing tool in metadata",
 }
 
@@ -39,6 +41,8 @@ class RiskScorer:
     def score(self, findings: list[Finding]) -> tuple[int, str, str, str]:
         scores = []
         cluster_hits = 0
+        has_date_anomaly = False
+        has_revision_anomaly = False
 
         for f in findings:
             base = _SEVERITY_BASE.get(f.severity, 0)
@@ -46,6 +50,10 @@ class RiskScorer:
             scores.append(weighted)
             if f.title in _CLUSTER_TITLES:
                 cluster_hits += 1
+            if f.title in _CLUSTER_DATE:
+                has_date_anomaly = True
+            if f.title in _CLUSTER_REVISION:
+                has_revision_anomaly = True
 
         scores.sort(reverse=True)
 
@@ -54,7 +62,10 @@ class RiskScorer:
             total += s * (0.8 ** index)
 
         if cluster_hits >= 2:
-            total += 10
+            if has_date_anomaly and has_revision_anomaly:
+                total += 15
+            else:
+                total += 10
 
         score_int = min(round(total), 100)
 
