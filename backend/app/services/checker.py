@@ -1,44 +1,54 @@
-from typing import Any
+from app.models.schemas import ExtractedMetadata
 
 
-def check_metadata(metadata: dict[str, Any]) -> list[dict[str, Any]]:
+def check_metadata(metadata: ExtractedMetadata) -> list[dict]:
     issues = []
 
-    if metadata.get("author"):
+    if metadata.author:
         issues.append({
-            "field": "author",
-            "severity": "medium",
-            "message": "Author metadata is present and may identify the creator.",
+            "title": "Author metadata present",
+            "severity": "Medium",
+            "confidence": 1.0,
+            "explanation": "Author metadata is present and may identify the creator.",
         })
 
-    if metadata.get("creator") or metadata.get("producer"):
+    if metadata.creator or metadata.producer:
         issues.append({
-            "field": "creator",
-            "severity": "low",
-            "message": "Creator/producer tool info is embedded.",
+            "title": "Creator or producer info embedded",
+            "severity": "Low",
+            "confidence": 1.0,
+            "explanation": "Creator or producer tool info is embedded in the file.",
         })
 
-    if metadata.get("exif") and isinstance(metadata["exif"], dict):
-        gps_keys = [k for k in metadata["exif"] if "gps" in k.lower()]
+    if metadata.raw_info:
+        raw = metadata.raw_info
+        gps_keys = [k for k in raw if "gps" in k.lower()]
         if gps_keys:
             issues.append({
-                "field": "exif.gps",
-                "severity": "high",
-                "message": "GPS location data found in EXIF metadata.",
+                "title": "GPS location data found",
+                "severity": "High",
+                "confidence": 1.0,
+                "explanation": "GPS location data found in EXIF metadata.",
             })
-
-        if "Make" in metadata["exif"] or "Model" in metadata["exif"]:
+        if "Make" in raw or "Model" in raw:
             issues.append({
-                "field": "exif.device",
-                "severity": "medium",
-                "message": "Device make/model found in EXIF metadata.",
+                "title": "Camera make/model found",
+                "severity": "Medium",
+                "confidence": 1.0,
+                "explanation": "Device make or model found in EXIF metadata.",
             })
 
-    if metadata.get("error") == "unsupported format":
+    if metadata.file_type not in (
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ):
         issues.append({
-            "field": "format",
-            "severity": "info",
-            "message": f"Unsupported file format: {metadata.get('format')}",
+            "title": "Unsupported file format",
+            "severity": "Medium",
+            "confidence": 1.0,
+            "explanation": f"Unsupported file type: {metadata.file_type}",
         })
 
     return issues
