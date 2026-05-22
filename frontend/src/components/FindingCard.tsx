@@ -2,7 +2,7 @@ import type { Finding } from "../types";
 
 interface Props {
   finding: Finding;
-  mode: "simple" | "technical";
+  mode: "basic" | "detailed";
 }
 
 const borderColors: Record<string, string> = {
@@ -39,7 +39,7 @@ function confidenceLabel(c: number): string {
 export default function FindingCard({ finding, mode }: Props) {
   const pct = Math.round(finding.confidence * 100);
   const title =
-    mode === "simple"
+    mode === "basic"
       ? simpleTitles[finding.title] ?? finding.title
       : finding.title;
 
@@ -51,7 +51,7 @@ export default function FindingCard({ finding, mode }: Props) {
         <h4 className="text-white font-semibold">{title}</h4>
       </div>
 
-      {mode === "simple" ? (
+      {mode === "basic" ? (
         <>
           <p className="mt-2 text-xs text-zinc-400">
             Confidence: {confidenceLabel(finding.confidence)}

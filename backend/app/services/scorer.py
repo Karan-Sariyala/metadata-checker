@@ -1,6 +1,14 @@
 from app.models.schemas import Finding
 
 
+_ROUTINE_FINDINGS = {
+    "Creator and producer mismatch",
+    "Known editing tool in metadata",
+    "Author field is empty",
+    "Document is encrypted",
+    "Modification significantly after creation",
+}
+
 _CLUSTER_DATE = {"Modified date precedes creation date", "XMP and document info date mismatch"}
 _CLUSTER_REVISION = {"PDF contains multiple saved revisions", "High revision count detected"}
 _CLUSTER_TITLES = {
@@ -44,10 +52,24 @@ class RiskScorer:
         has_date_anomaly = False
         has_revision_anomaly = False
 
+        non_routine_signals = [
+            f for f in findings
+            if f.title not in _ROUTINE_FINDINGS
+            and f.severity in ("Medium", "High")
+        ]
+        has_corroboration = len(non_routine_signals) > 0
+
         for f in findings:
             base = _SEVERITY_BASE.get(f.severity, 0)
-            weighted = base * f.confidence
-            scores.append(weighted)
+            is_routine = f.title in _ROUTINE_FINDINGS
+            if is_routine and has_corroboration:
+                routine_multiplier = 1.0
+            elif is_routine:
+                routine_multiplier = 0.4
+            else:
+                routine_multiplier = 1.0
+            finding_score = base * f.confidence * routine_multiplier
+            scores.append(finding_score)
             if f.title in _CLUSTER_TITLES:
                 cluster_hits += 1
             if f.title in _CLUSTER_DATE:

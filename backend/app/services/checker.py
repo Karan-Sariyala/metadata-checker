@@ -1,6 +1,9 @@
+import logging
 from datetime import datetime, timezone, timedelta
 from dateutil import parser as dateparser
 from app.models.schemas import ExtractedMetadata, Finding
+
+logger = logging.getLogger(__name__)
 
 
 _EDIT_TOOLS = [
@@ -10,6 +13,16 @@ _EDIT_TOOLS = [
 
 
 class MetadataChecker:
+
+    @staticmethod
+    def _normalize_date(raw: str | None) -> str | None:
+        if not raw or not raw.strip():
+            return None
+        val = raw.strip()
+        if val.startswith("D:"):
+            val = val[2:]
+        val = val.replace("'", "")
+        return val
 
     def run_checks(self, metadata: ExtractedMetadata) -> list[Finding]:
         findings: list[Finding] = []
@@ -34,13 +47,12 @@ class MetadataChecker:
                 if result is not None:
                     findings.append(result)
             except Exception:
-                pass
+                logger.warning("Check %s failed unexpectedly", check.__name__, exc_info=True)
         return findings
 
-    # ── 1 ──────────────────────────────────────────────────────────
-
     def _check_missing_creation_date(self, metadata: ExtractedMetadata) -> Finding | None:
-        if metadata.created_date is None or metadata.created_date.strip() == "":
+        if (metadata.created_date is None or metadata.created_date.strip() == "") and \
+           not (metadata.modified_date is None or metadata.modified_date.strip() == ""):
             return Finding(
                 title="Missing creation date",
                 severity="Low",
@@ -52,14 +64,16 @@ class MetadataChecker:
             )
         return None
 
-    # ── 2 ──────────────────────────────────────────────────────────
-
     def _check_modified_before_created(self, metadata: ExtractedMetadata) -> Finding | None:
         if not metadata.created_date or not metadata.modified_date:
             return None
         try:
-            created = dateparser.parse(metadata.created_date)
-            modified = dateparser.parse(metadata.modified_date)
+            c_str = self._normalize_date(metadata.created_date)
+            m_str = self._normalize_date(metadata.modified_date)
+            if not c_str or not m_str:
+                return None
+            created = dateparser.parse(c_str)
+            modified = dateparser.parse(m_str)
             if modified < created:
                 return Finding(
                     title="Modified date precedes creation date",
@@ -76,14 +90,16 @@ class MetadataChecker:
             pass
         return None
 
-    # ── 3 ──────────────────────────────────────────────────────────
-
     def _check_modification_significantly_after_creation(self, metadata: ExtractedMetadata) -> Finding | None:
         if not metadata.created_date or not metadata.modified_date:
             return None
         try:
-            created = dateparser.parse(metadata.created_date)
-            modified = dateparser.parse(metadata.modified_date)
+            c_str = self._normalize_date(metadata.created_date)
+            m_str = self._normalize_date(metadata.modified_date)
+            if not c_str or not m_str:
+                return None
+            created = dateparser.parse(c_str)
+            modified = dateparser.parse(m_str)
             if modified > created and (modified - created).days > 180:
                 return Finding(
                     title="Modification significantly after creation",
@@ -99,8 +115,6 @@ class MetadataChecker:
             pass
         return None
 
-    # ── 4 ──────────────────────────────────────────────────────────
-
     def _check_both_dates_missing(self, metadata: ExtractedMetadata) -> Finding | None:
         if (metadata.created_date is None or metadata.created_date.strip() == "") and \
            (metadata.modified_date is None or metadata.modified_date.strip() == ""):
@@ -115,13 +129,12 @@ class MetadataChecker:
             )
         return None
 
-    # ── 5 ──────────────────────────────────────────────────────────
-
     def _check_suspicious_date_format(self, metadata: ExtractedMetadata) -> Finding | None:
         for val in (metadata.created_date, metadata.modified_date):
-            if val and val.strip():
+            norm = self._normalize_date(val)
+            if norm:
                 try:
-                    dateparser.parse(val)
+                    dateparser.parse(norm)
                 except Exception:
                     return Finding(
                         title="Suspicious date format",
@@ -133,8 +146,6 @@ class MetadataChecker:
                         ),
                     )
         return None
-
-    # ── 6 ──────────────────────────────────────────────────────────
 
     def _check_creator_producer_mismatch(self, metadata: ExtractedMetadata) -> Finding | None:
         if not metadata.creator or not metadata.producer:
@@ -153,8 +164,6 @@ class MetadataChecker:
                 ),
             )
         return None
-
-    # ── 7 ──────────────────────────────────────────────────────────
 
     def _check_known_editing_tool(self, metadata: ExtractedMetadata) -> Finding | None:
         detected: list[str] = []
@@ -178,8 +187,6 @@ class MetadataChecker:
             technical_detail=f"Detected: {', '.join(detected)}",
         )
 
-    # ── 8 ──────────────────────────────────────────────────────────
-
     def _check_author_empty(self, metadata: ExtractedMetadata) -> Finding | None:
         if metadata.author is None or metadata.author.strip() == "":
             return Finding(
@@ -192,8 +199,6 @@ class MetadataChecker:
                 ),
             )
         return None
-
-    # ── 9 ──────────────────────────────────────────────────────────
 
     def _check_xmp_date_mismatch(self, metadata: ExtractedMetadata) -> Finding | None:
         xmp = metadata.xmp_metadata
@@ -216,8 +221,12 @@ class MetadataChecker:
             if not doc_val or not xmp_val:
                 continue
             try:
-                doc_dt = dateparser.parse(doc_val)
-                xmp_dt = dateparser.parse(xmp_val)
+                d_str = self._normalize_date(doc_val)
+                x_str = self._normalize_date(xmp_val)
+                if not d_str or not x_str:
+                    continue
+                doc_dt = dateparser.parse(d_str)
+                xmp_dt = dateparser.parse(x_str)
                 delta = abs((doc_dt - xmp_dt).total_seconds())
                 if delta > threshold.total_seconds():
                     details.append(
@@ -244,8 +253,6 @@ class MetadataChecker:
             technical_detail="\n---\n".join(details),
         )
 
-    # ── 10 ─────────────────────────────────────────────────────────
-
     def _check_is_encrypted(self, metadata: ExtractedMetadata) -> Finding | None:
         if metadata.is_encrypted is True:
             return Finding(
@@ -260,8 +267,6 @@ class MetadataChecker:
             )
         return None
 
-
-    # ── 11 ─────────────────────────────────────────────────────────
 
     def _check_multiple_saved_revisions(self, metadata: ExtractedMetadata) -> Finding | None:
         inc = metadata.incremental_updates
@@ -283,8 +288,6 @@ class MetadataChecker:
             technical_detail=f"%%EOF markers found at byte offsets: {positions}",
         )
 
-    # ── 12 ─────────────────────────────────────────────────────────
-
     def _check_high_revision_count(self, metadata: ExtractedMetadata) -> Finding | None:
         inc = metadata.incremental_updates
         if inc is None:
@@ -303,8 +306,6 @@ class MetadataChecker:
             ),
         )
 
-
-    # ── 13 ─────────────────────────────────────────────────────────
 
     def _check_xmp_creator_tool_mismatch(self, metadata: ExtractedMetadata) -> Finding | None:
         xmp = metadata.xmp_metadata

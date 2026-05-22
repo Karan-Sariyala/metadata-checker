@@ -3,57 +3,60 @@ import type { Finding } from "../types";
 
 interface Props {
   findings: Finding[];
-  totalScore: number;
   riskLevel: string;
 }
 
-const SEVERITY_BASE: Record<string, number> = { High: 30, Medium: 15, Low: 5 };
-
-const COLORS: Record<string, string> = { High: "#ef4444", Medium: "#f59e0b", Low: "#3b82f6" };
-
-const CENTER_COLORS: Record<string, string> = {
-  Low: "#22c55e",
-  Medium: "#f59e0b",
+const SEVERITY_COLORS: Record<string, string> = {
   High: "#ef4444",
+  Medium: "#f59e0b",
+  Low: "#3b82f6",
 };
 
-export default function RiskDonut({ findings, totalScore, riskLevel }: Props) {
+export default function RiskDonut({ findings, riskLevel }: Props) {
   const counts: Record<string, number> = { High: 0, Medium: 0, Low: 0 };
   for (const f of findings) {
     if (f.severity in counts) counts[f.severity]++;
   }
 
-  const slices: { name: string; value: number; color: string }[] = [];
-  let rawTotal = 0;
-  for (const sev of ["High", "Medium", "Low"] as const) {
-    const v = counts[sev] * SEVERITY_BASE[sev];
-    if (v > 0) {
-      rawTotal += v;
-      slices.push({ name: sev, value: v, color: COLORS[sev] });
-    }
+  const hasData = Object.values(counts).some((c) => c > 0);
+
+  if (!hasData) {
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <div className="relative w-[140px] h-[140px] sm:w-[160px] sm:h-[160px]">
+          <PieChart width={160} height={160}>
+            <Pie data={[{ name: "None", value: 100 }]} cx={80} cy={80} innerRadius={55} outerRadius={75} dataKey="value" stroke="none">
+              <Cell fill="#3f3f46" />
+            </Pie>
+          </PieChart>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="text-sm text-zinc-500">No issues</span>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  const unused = Math.max(0, 100 - totalScore);
-  if (unused > 0) {
-    slices.push({ name: "Unused", value: unused, color: "#3f3f46" });
-  }
+  const slices = (["High", "Medium", "Low"] as const)
+    .filter((sev) => counts[sev] > 0)
+    .map((sev) => ({
+      name: sev,
+      value: counts[sev],
+      color: SEVERITY_COLORS[sev],
+    }));
 
-  if (slices.length === 0) {
-    slices.push({ name: "None", value: 100, color: "#3f3f46" });
-  }
-
-  const centerColor = totalScore === 0 ? "#22c55e" : CENTER_COLORS[riskLevel] ?? "#e5e5e5";
+  const centerColor = SEVERITY_COLORS[riskLevel] ?? "#e5e5e5";
 
   return (
-    <div className="flex items-center gap-6 flex-wrap">
-      <div className="relative shrink-0" style={{ width: 200, height: 200 }}>
-        <PieChart width={200} height={200}>
+    <div className="flex flex-col sm:flex-row items-center gap-6">
+      <div className="relative w-[140px] h-[140px] sm:w-[160px] sm:h-[160px] shrink-0">
+        <PieChart width={160} height={160}>
           <Pie
             data={slices}
-            cx={100}
-            cy={100}
-            innerRadius={65}
-            outerRadius={95}
+            cx={80}
+            cy={80}
+            innerRadius={55}
+            outerRadius={75}
             dataKey="value"
             stroke="none"
           >
@@ -62,43 +65,32 @@ export default function RiskDonut({ findings, totalScore, riskLevel }: Props) {
             ))}
           </Pie>
         </PieChart>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-3xl font-bold" style={{ color: centerColor }}>
-            {totalScore}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none">
+          <span className="text-lg font-bold" style={{ color: centerColor }}>
+            {findings.length}
           </span>
-          <span className="text-xs text-zinc-500 uppercase tracking-wider mt-0.5">
-            {findings.length === 0 ? "No issues" : riskLevel}
+          <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
+            signals
           </span>
         </div>
       </div>
 
-      <div className="space-y-2 text-sm">
+      <div className="space-y-1.5 text-sm">
         {(["High", "Medium", "Low"] as const).map((sev) => {
           const c = counts[sev];
           if (c === 0) return null;
-          const pts = c * SEVERITY_BASE[sev];
           return (
             <div key={sev} className="flex items-center gap-2 text-zinc-300">
               <span
                 className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: COLORS[sev] }}
+                style={{ backgroundColor: SEVERITY_COLORS[sev] }}
               />
               <span className="capitalize w-16">{sev.toLowerCase()}</span>
-              <span className="text-zinc-500 w-6 text-right">{c}</span>
-              <span className="text-zinc-600">&mdash;</span>
-              <span className="text-zinc-400 w-16 text-right">{pts} pts</span>
+              <span className="text-zinc-400 font-medium">{c}</span>
+              <span className="text-zinc-600 text-xs">{c === 1 ? "signal" : "signals"}</span>
             </div>
           );
         })}
-        {totalScore < 100 && (
-          <div className="flex items-center gap-2 text-zinc-500">
-            <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-zinc-600" />
-            <span className="w-16">Unused</span>
-            <span className="w-6 text-right">&ndash;</span>
-            <span className="text-zinc-600">&mdash;</span>
-            <span className="w-16 text-right">{100 - totalScore} pts</span>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -1,9 +1,9 @@
 interface Props {
-  mode: "simple" | "technical";
-  onToggle: (mode: "simple" | "technical") => void;
+  mode: "basic" | "detailed";
+  onToggle: (mode: "basic" | "detailed") => void;
 }
 
-const modes = ["simple", "technical"] as const;
+const modes = ["basic", "detailed"] as const;
 
 export default function ModeToggle({ mode, onToggle }: Props) {
   return (
@@ -18,7 +18,7 @@ export default function ModeToggle({ mode, onToggle }: Props) {
               : "bg-transparent text-zinc-500 hover:text-zinc-300"
           }`}
         >
-          {m === "simple" ? "Simple" : "Technical"}
+          {m === "basic" ? "Basic" : "Detailed"}
         </button>
       ))}
     </div>

@@ -2,10 +2,44 @@ import os
 import re
 from app.models.schemas import ExtractedMetadata
 
+_MAX_META_LEN = 500
+
+
+def _truncate(val: str | None, max_len: int = _MAX_META_LEN) -> str | None:
+    if val is None:
+        return None
+    if len(val) > max_len:
+        return val[:max_len] + "...[truncated]"
+    return val
+
+
+def _truncate_dict(d: dict | None, max_len: int = _MAX_META_LEN) -> dict | None:
+    if d is None:
+        return None
+    result = {}
+    for k, v in d.items():
+        if isinstance(v, str):
+            result[k] = _truncate(v, max_len)
+        elif isinstance(v, dict):
+            result[k] = _truncate_dict(v, max_len)
+        elif isinstance(v, list):
+            result[k] = [_truncate(x, max_len) if isinstance(x, str) else x for x in v]
+        else:
+            result[k] = v
+    return result
+
 
 class MetadataExtractor:
 
     def extract(self, file_path: str, file_name: str, file_type: str) -> ExtractedMetadata:
+        if os.path.getsize(file_path) == 0:
+            return ExtractedMetadata(
+                file_name=file_name,
+                file_size_bytes=0,
+                file_type=file_type,
+                raw_info={"error": "File appears to be empty"},
+            )
+
         if file_type == "application/pdf":
             return self._extract_pdf(file_path, file_name)
         elif file_type in ("image/jpeg", "image/png"):
@@ -23,33 +57,62 @@ class MetadataExtractor:
     def _extract_pdf(self, file_path: str, file_name: str) -> ExtractedMetadata:
         import fitz
 
-        doc = fitz.open(file_path)
+        enc_result = None
+        try:
+            doc = fitz.open(file_path)
+        except Exception as e:
+            if "encrypt" in str(e).lower():
+                enc_result = ExtractedMetadata(
+                    file_name=file_name,
+                    file_size_bytes=os.path.getsize(file_path),
+                    file_type="application/pdf",
+                    is_encrypted=True,
+                    raw_info={"note": "Document is encrypted — limited metadata available"},
+                )
+            raise
+        finally:
+            if enc_result is not None:
+                return enc_result
+
+        if doc.is_encrypted:
+            result = ExtractedMetadata(
+                file_name=file_name,
+                file_size_bytes=os.path.getsize(file_path),
+                file_type="application/pdf",
+                page_count=doc.page_count,
+                is_encrypted=True,
+                raw_info={"note": "Document is encrypted — limited metadata available"},
+            )
+            doc.close()
+            return result
+
         meta = doc.metadata or {}
 
         xmp_text = doc.get_xml_metadata()
-        xmp_dict = self._parse_xmp(xmp_text) if xmp_text else None
+        xmp_dict = _truncate_dict(self._parse_xmp(xmp_text) if xmp_text else None)
 
         incremental = self.detect_incremental_updates(file_path)
 
         result = ExtractedMetadata(
-            file_name=file_name,
+            file_name=_truncate(file_name),
             file_size_bytes=os.path.getsize(file_path),
             file_type="application/pdf",
             pdf_version=meta.get("format"),
-            created_date=meta.get("creationDate"),
-            modified_date=meta.get("modDate"),
-            author=meta.get("author"),
-            creator=meta.get("creator"),
-            producer=meta.get("producer"),
-            title=meta.get("title"),
-            subject=meta.get("subject"),
+            created_date=_truncate(meta.get("creationDate")),
+            modified_date=_truncate(meta.get("modDate")),
+            author=_truncate(meta.get("author")),
+            creator=_truncate(meta.get("creator")),
+            producer=_truncate(meta.get("producer")),
+            title=_truncate(meta.get("title")),
+            subject=_truncate(meta.get("subject")),
             page_count=doc.page_count,
             is_encrypted=doc.is_encrypted,
             xmp_metadata=xmp_dict,
-            raw_info={k: v for k, v in meta.items() if k not in (
-                "author", "title", "subject", "creator", "producer",
-                "creationDate", "modDate"
-            )},
+            raw_info={k: _truncate(v) if isinstance(v, str) else v
+                      for k, v in meta.items() if k not in (
+                          "author", "title", "subject", "creator", "producer",
+                          "creationDate", "modDate"
+                      )},
             incremental_updates=incremental,
         )
         doc.close()
@@ -96,15 +159,15 @@ class MetadataExtractor:
         img.close()
 
         return ExtractedMetadata(
-            file_name=file_name,
+            file_name=_truncate(file_name),
             file_size_bytes=os.path.getsize(file_path),
             file_type=file_type,
-            created_date=created_date,
-            modified_date=modified_date,
-            author=author,
-            creator=creator,
+            created_date=_truncate(created_date),
+            modified_date=_truncate(modified_date),
+            author=_truncate(author),
+            creator=_truncate(creator),
             page_count=1,
-            raw_info=raw_exif,
+            raw_info=_truncate_dict(raw_exif),
         )
 
     def _extract_docx(self, file_path: str, file_name: str) -> ExtractedMetadata:
@@ -116,16 +179,16 @@ class MetadataExtractor:
         page_count_proxy = len(doc.paragraphs)
 
         return ExtractedMetadata(
-            file_name=file_name,
+            file_name=_truncate(file_name),
             file_size_bytes=os.path.getsize(file_path),
             file_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            created_date=str(props.created) if props.created else None,
-            modified_date=str(props.modified) if props.modified else None,
-            author=props.author,
-            title=props.title,
-            subject=props.subject,
+            created_date=_truncate(str(props.created)) if props.created else None,
+            modified_date=_truncate(str(props.modified)) if props.modified else None,
+            author=_truncate(props.author),
+            title=_truncate(props.title),
+            subject=_truncate(props.subject),
             page_count=page_count_proxy,
-            raw_info={
+            raw_info=_truncate_dict({
                 "paragraph_count": page_count_proxy,
                 "page_count_note": "page_count is a proxy based on paragraph count",
                 "last_modified_by": props.last_modified_by,
@@ -136,7 +199,7 @@ class MetadataExtractor:
                 "identifier": props.identifier,
                 "language": props.language,
                 "version": props.version,
-            },
+            }),
         )
 
     def detect_incremental_updates(self, file_path: str) -> dict:

@@ -14,8 +14,8 @@ export default function RiskBadge({ level, score }: Props) {
     <div
       className={`inline-flex items-center gap-3 px-5 py-3 rounded-xl border text-lg font-bold ${colors[level]}`}
     >
-      <span>{level}</span>
-      <span className="text-base font-normal opacity-80">&mdash; {score}/100</span>
+      <span>{score}</span>
+      <span className="text-base font-normal opacity-80">{level}</span>
     </div>
   );
 }

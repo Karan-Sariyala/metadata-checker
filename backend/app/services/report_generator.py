@@ -82,11 +82,9 @@ def _risk_circle(score: int, level: str) -> Drawing:
 def _build_report(report: AnalysisReport) -> list:
     elements = []
 
-    # Header
     elements.append(_header_table(report))
     elements.append(Spacer(1, 16))
 
-    # Document name
     elements.append(Paragraph(report.document_name, styles["DocName"]))
     elements.append(Paragraph(
         f"{report.file_type} &mdash; {report.extracted_metadata.file_size_bytes:,} bytes",
@@ -94,7 +92,6 @@ def _build_report(report: AnalysisReport) -> list:
     ))
     elements.append(Spacer(1, 14))
 
-    # Risk score — centered
     risk_table = Table(
         [[_risk_circle(report.metadata_risk_score, report.metadata_risk_level),
           Paragraph(report.metadata_risk_level, styles["RiskLabel"])]],
@@ -109,7 +106,6 @@ def _build_report(report: AnalysisReport) -> list:
     elements.append(wrapper)
     elements.append(Spacer(1, 14))
 
-    # Summary
     summary_data = [[Paragraph(report.summary, styles["SummaryText"])]]
     summary_table = Table(summary_data, colWidths=[PAGE_W - 2 * MARGIN - 20])
     summary_table.setStyle(TableStyle([
@@ -123,7 +119,6 @@ def _build_report(report: AnalysisReport) -> list:
     elements.append(summary_table)
     elements.append(Spacer(1, 14))
 
-    # Metadata table
     elements.append(Paragraph("Extracted Metadata", styles["Heading6"]))
     elements.append(Spacer(1, 4))
     meta = report.extracted_metadata
@@ -163,7 +158,6 @@ def _build_report(report: AnalysisReport) -> list:
     elements.append(meta_table)
     elements.append(Spacer(1, 14))
 
-    # Findings table
     elements.append(Paragraph(f"Findings ({len(report.findings)})", styles["Heading6"]))
     elements.append(Spacer(1, 4))
     find_rows = [["Finding", "Severity", "Conf.", "Explanation"]]
@@ -194,7 +188,6 @@ def _build_report(report: AnalysisReport) -> list:
     elements.append(find_table)
     elements.append(Spacer(1, 14))
 
-    # Footer
     footer_text = (
         "This report identifies metadata signals only. It does not constitute "
         "proof of document tampering or fraud."

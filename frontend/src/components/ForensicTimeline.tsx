@@ -150,7 +150,7 @@ export default function ForensicTimeline({ metadata, findings }: Props) {
 
       {/* Tool row */}
       {(metadata.creator || metadata.producer) && (
-        <div className="flex gap-3 mt-4">
+        <div className="flex flex-col sm:flex-row gap-3 mt-4">
           {metadata.creator && (
             <div className={`flex-1 rounded-lg border px-3 py-2 text-xs ${toolDiff ? "border-amber-700 bg-amber-900/20" : "border-zinc-700"}`}>
               <span className="text-zinc-500">Created with:</span>
